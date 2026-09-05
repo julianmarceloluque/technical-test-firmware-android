@@ -1,0 +1,11 @@
+# Binarios y objetos generados por la compilacion
+firmware/build/
+*.o
+*.obj
+*.exe
+*.out
+
+# Editores
+.vscode/
+.idea/
+*.swp

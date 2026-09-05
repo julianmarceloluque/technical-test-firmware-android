@@ -1,0 +1,140 @@
+============================================================================
+ VCP-1 - Banco de pruebas del receptor / respondedor  (ejercicio E1.7)
+============================================================================
+ Direccion propia   : 0x0A
+ Politica de resync : REPROCESO  (al fallar, re-examina desde STX+1)
+ Plazo de respuesta : 5 ms  (estricto: una trama detectada tarde NO se contesta)
+ Reloj simulado     : 1.042 ms por byte  (~9600 baudios 8N1)
+ Entrada            : ..\Anexos\stream_vcp1.txt  (76 bytes)
+----------------------------------------------------------------------------
+
+  t=    0.00 ms  off 0..2  RUIDO      3 byte(s) descartados: AA 55 7F
+  ----------------------------------------------------------------------------
+  TRAMA #1   off 3..8   t_etx=8.33 ms
+    crudo    : 02 0A 00 10 F7 03
+    campos   : ADDR=0x0A (propia)  LEN=0  CMD=0x10 STATUS_REQ
+    payload  : (vacio)
+    decision : RESPONDER -> STATUS_RESP   (retardo desde ETX: 0 ms)
+    nota     : interrogacion periodica
+    TX       : 02 0A 04 11 00 00 00 EB 38 03
+               estado=0x00 LISTO  reservado=0x00  temp=23.5 C
+  ----------------------------------------------------------------------------
+  TRAMA #2   off 9..14   t_etx=14.58 ms
+    crudo    : 02 0B 00 10 9C 03
+    campos   : ADDR=0x0B (ajena)   LEN=0  CMD=0x10 STATUS_REQ
+    payload  : (vacio)
+    decision : NO_ES_MIA   (retardo desde ETX: 0 ms)
+    nota     : otra direccion: se procesa, no se responde
+    TX       : (nada)
+  ----------------------------------------------------------------------------
+  TRAMA #3   off 15..26   t_etx=27.08 ms
+    crudo    : 02 0A 06 40 41 42 02 03 43 44 61 03
+    campos   : ADDR=0x0A (propia)  LEN=6  CMD=0x40 LOG_EVENT
+    payload  : 41 42 02 03 43 44
+               texto="AB..CD"
+    decision : RESPONDER -> ACK   (retardo desde ETX: 0 ms)
+    nota     : evento de log registrado
+    TX       : 02 0A 00 01 80 03
+  ----------------------------------------------------------------------------
+  ERROR #1   ERR_CRC   off 27..35   t=36.46 ms
+    crudo    : 02 0A 03 20 05 03 E8 E3 03
+    detalle  : CRC recibido 0xE3, calculado 0x1C.
+               ADDR=0x0A LEN=3 CMD=0x20 (VEND_REQUEST): la estructura
+               cierra pero el contenido no es el que salio del
+               emisor. Se descarta entera.
+    accion   : no se transmite nada (tabla A.4). El master
+               reintenta a los 100 ms.
+  t=   29.17 ms  off 28..35  RE-EXAMEN  8 byte(s) descartados: 0A 03 20 05 03 E8 E3 03
+  ----------------------------------------------------------------------------
+  ERROR #2   ERR_CRC   off 36..49   t=51.04 ms
+    crudo    : 02 0A 08 40 54 52 02 0A 02 21 00 2A 0F 03
+    detalle  : CRC recibido 0x0F, calculado 0x40.
+               ADDR=0x0A LEN=8 CMD=0x40 (LOG_EVENT): la estructura
+               cierra pero el contenido no es el que salio del
+               emisor. Se descarta entera.
+    accion   : no se transmite nada (tabla A.4). El master
+               reintenta a los 100 ms.
+  t=   38.54 ms  off 37..41  RE-EXAMEN  5 byte(s) descartados: 0A 08 40 54 52
+  ----------------------------------------------------------------------------
+  TRAMA #4   off 42..49   t_etx=51.04 ms   [RECUPERADA re-sincronizando]
+    crudo    : 02 0A 02 21 00 2A 0F 03
+    campos   : ADDR=0x0A (propia)  LEN=2  CMD=0x21 VEND_APPROVE
+    payload  : 00 2A
+               txid=42 (0x002A)
+    decision : CMD_NO_ADMITIDO   (retardo desde ETX: 0 ms)
+    nota     : comando no admitido en este sentido: no se responde
+    TX       : (nada)
+  ----------------------------------------------------------------------------
+  ERROR #3   ERR_LEN   off 50..52   t=54.17 ms
+    crudo    : 02 0A 41
+    detalle  : LEN=0x41 (65) y el maximo del protocolo es 64.
+               Se corta en el acto, sin esperar CRC ni ETX:
+               seguir juntando bytes con un LEN imposible es
+               justamente lo que desborda un buffer.
+    accion   : no se transmite nada (tabla A.4). El master
+               reintenta a los 100 ms.
+  t=   53.13 ms  off 51..52  RE-EXAMEN  2 byte(s) descartados: 0A 41
+  t=   55.21 ms  off 53..56  RUIDO      4 byte(s) descartados: 40 58 58 58
+  ----------------------------------------------------------------------------
+  ERROR #4   ERR_FRAMING   off 57..72   t=75.00 ms
+    crudo    : 02 02 0A 02 30 00 2A C6 03 02 00 02 40 42 43 15
+    detalle  : donde tenia que ir el ETX (0x03) habia 0x15.
+               El encuadre esta mal: el 0x02 del offset 57 no
+               era un STX de verdad.
+    accion   : no se transmite nada (tabla A.4). El master
+               reintenta a los 100 ms.
+  ----------------------------------------------------------------------------
+  TRAMA #5   off 58..65   t_etx=67.71 ms   [RECUPERADA re-sincronizando]
+    crudo    : 02 0A 02 30 00 2A C6 03
+    campos   : ADDR=0x0A (propia)  LEN=2  CMD=0x30 VEND_SUCCESS
+    payload  : 00 2A
+               txid=42 (0x002A)
+    decision : FUERA_DE_PLAZO -> ACK   (retardo desde ETX: 8 ms)
+    nota     : confirmacion de entrega
+    TX       : 02 0A 00 01 80 03   <-- NO TRANSMITIDA
+    motivo   : el ETX fue hace 8 ms y el plazo es 5 ms.
+               Contestar ahora se superpondria con la trama
+               siguiente del master (Anexo A.2). El master
+               reintenta a los 100 ms.
+  ----------------------------------------------------------------------------
+  TRAMA #6   off 66..73   t_etx=76.04 ms
+    crudo    : 02 00 02 40 42 43 15 03
+    campos   : ADDR=0x00 (bcast)   LEN=2  CMD=0x40 LOG_EVENT
+    payload  : 42 43
+               texto="BC"
+    decision : BROADCAST   (retardo desde ETX: 0 ms)
+    nota     : broadcast: se procesa, no se responde
+    TX       : (nada)
+  t=   77.08 ms  off 74..75  RUIDO      2 byte(s) descartados: 00 FF
+
+============================================================================
+ RESUMEN
+============================================================================
+ RECEPCION
+   bytes recibidos          : 76
+   bytes fuera de trama     : 24   (ruido + descartes de resync)
+   bytes reprocesados       : 38
+   tramas validas           : 6
+     de ellas, recuperadas  : 2   (aparecieron re-sincronizando)
+ ERRORES (diferenciados, requisito E1.5)
+   CRC no coincide          : 2
+   LEN fuera de rango       : 1
+   framing (falta ETX)      : 1
+   timeout entre bytes      : 0
+   internos (deberia ser 0) : 0
+ APLICACION
+   tramas propias (0x0A)    : 4
+   tramas broadcast         : 1
+   tramas de otra direccion : 1
+   comandos no admitidos    : 1   (sentido inverso / desconocido)
+   LEN inesperado           : 0
+   LOG_EVENT registrados    : 2  (8 bytes)
+ EMISION
+   respuestas transmitidas  : 2
+   omitidas por plazo       : 1
+   escrituras a la UART     : 2  (16 bytes)
+ SESION DE VENTA
+   estado final             : INACTIVA
+   pedidos / aprobadas / denegadas : 0 / 0 / 0
+   confirmaciones con txid desconocido : 1
+============================================================================

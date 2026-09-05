@@ -1,0 +1,164 @@
+============================================================================
+ VCP-1 - Demostracion de la sesion de venta (requisito E1.12)
+ La expendedora esta simulada: arma tramas reales y las entrega
+ byte a byte a 9600 8N1 (1.0417 ms por byte).
+============================================================================
+
+============================================================================
+ ESCENARIO 1 - Venta completa
+----------------------------------------------------------------------------
+ El caso feliz. Fijate en el punto clave: el cobro tarda 250 ms,
+ muchisimo mas que los 5 ms de plazo, asi que el controlador
+ contesta VEND_PENDING y el resultado viaja recien en la respuesta
+ a un STATUS_REQ POSTERIOR. Eso es el requisito E1.12.
+
+  t=   0.00 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t=   6.25 ms  CTRL -> MAQ  STATUS_RESP   02 0A 04 11 00 00 00 EB 38 03   estado=LISTO temp=23.5C
+  t=  96.25 ms  MAQ -> CTRL  VEND_REQUEST  02 0A 03 20 18 07 08 D5 03
+  t= 105.63 ms  CTRL -> MAQ  VEND_PENDING  02 0A 00 23 6E 03
+  t= 195.63 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t= 201.88 ms  CTRL -> MAQ  STATUS_RESP   02 0A 04 11 01 00 00 EB 2E 03   estado=OCUPADO temp=23.5C
+  t= 291.88 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t= 298.13 ms  CTRL -> MAQ  STATUS_RESP   02 0A 04 11 01 00 00 EB 2E 03   estado=OCUPADO temp=23.5C
+  t= 388.13 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t= 394.38 ms  CTRL -> MAQ  VEND_APPROVE  02 0A 02 21 22 10 2D 03   txid=8720
+  t= 484.38 ms  MAQ -> CTRL  VEND_SUCCESS  02 0A 02 30 22 10 E4 03
+  t= 492.71 ms  CTRL -> MAQ  ACK           02 0A 00 01 80 03
+  t= 582.71 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t= 588.96 ms  CTRL -> MAQ  STATUS_RESP   02 0A 04 11 00 00 00 EB 38 03   estado=LISTO temp=23.5C
+
+  [estado final de la sesion: INACTIVA | cobros iniciados: 1]
+
+============================================================================
+ ESCENARIO 2 - El medio de pago rechaza
+----------------------------------------------------------------------------
+ Mismo flujo, pero el cobro sale rechazado. El resultado pendiente
+ se informa como VEND_DENY motivo 0x03 y la sesion se cierra sola:
+ el DENY se manda UNA vez (no se latchea como el APPROVE) porque no
+ se movio plata.
+
+  t=   0.00 ms  MAQ -> CTRL  VEND_REQUEST  02 0A 03 20 0C 03 84 25 03
+  t=   9.38 ms  CTRL -> MAQ  VEND_PENDING  02 0A 00 23 6E 03
+  t=  99.38 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t= 105.63 ms  CTRL -> MAQ  STATUS_RESP   02 0A 04 11 01 00 00 EB 2E 03   estado=OCUPADO temp=23.5C
+  t= 195.63 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t= 201.88 ms  CTRL -> MAQ  VEND_DENY     02 0A 01 22 03 7A 03   motivo=0x03 (pago rechazado)
+  t= 291.88 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t= 298.13 ms  CTRL -> MAQ  STATUS_RESP   02 0A 04 11 00 00 00 EB 38 03   estado=LISTO temp=23.5C
+
+  [estado final de la sesion: INACTIVA | cobros iniciados: 1]
+
+============================================================================
+ ESCENARIO 3 - Validacion de rangos (Anexo A.4)
+----------------------------------------------------------------------------
+ Seleccion valida 1..80, precio valido 50..20000 centavos.
+ Se rechazan SIN iniciar cobro: el contador de cobros iniciados
+ tiene que quedar en 0.
+
+  -- seleccion 0 (fuera de 1..80)
+  t=   0.00 ms  MAQ -> CTRL  VEND_REQUEST  02 0A 03 20 00 03 E8 DC 03
+  t=   9.38 ms  CTRL -> MAQ  VEND_DENY     02 0A 01 22 02 7D 03   motivo=0x02 (seleccion invalida)
+  -- seleccion 81 (fuera de 1..80)
+  t=  29.38 ms  MAQ -> CTRL  VEND_REQUEST  02 0A 03 20 51 03 E8 93 03
+  t=  38.75 ms  CTRL -> MAQ  VEND_DENY     02 0A 01 22 02 7D 03   motivo=0x02 (seleccion invalida)
+  -- precio 10 (menor a 50)
+  t=  58.75 ms  MAQ -> CTRL  VEND_REQUEST  02 0A 03 20 05 00 0A 83 03
+  t=  68.13 ms  CTRL -> MAQ  VEND_DENY     02 0A 01 22 01 74 03   motivo=0x01 (precio fuera de rango)
+  -- precio 20001 (mayor a 20000)
+  t=  88.13 ms  MAQ -> CTRL  VEND_REQUEST  02 0A 03 20 05 4E 21 DF 03
+  t=  97.50 ms  CTRL -> MAQ  VEND_DENY     02 0A 01 22 01 74 03   motivo=0x01 (precio fuera de rango)
+  -- seleccion 0 Y precio 10: se informa la seleccion (decision NE-04)
+  t= 117.50 ms  MAQ -> CTRL  VEND_REQUEST  02 0A 03 20 00 00 0A 43 03
+  t= 126.88 ms  CTRL -> MAQ  VEND_DENY     02 0A 01 22 02 7D 03   motivo=0x02 (seleccion invalida)
+
+  [estado final de la sesion: INACTIVA | cobros iniciados: 0]
+
+============================================================================
+ ESCENARIO 4 - VEND_REQUEST retransmitido (idempotencia)
+----------------------------------------------------------------------------
+ El master reintenta cada 100 ms si no recibe respuesta. Si tratamos
+ el reintento como pedido nuevo contestariamos DENY 0x04 y
+ abortariamos una venta cuyo cobro YA arranco.
+ Criterio (NE-02): mismo sel + mismo precio con sesion cobrando =
+ retransmision -> se repite VEND_PENDING y NO se inicia otro cobro.
+
+  t=   0.00 ms  MAQ -> CTRL  VEND_REQUEST  02 0A 03 20 07 05 DC 38 03
+  t=   9.38 ms  CTRL -> MAQ  VEND_PENDING  02 0A 00 23 6E 03
+  -- el master no recibio el PENDING y reintenta:
+  t= 109.38 ms  MAQ -> CTRL  VEND_REQUEST  02 0A 03 20 07 05 DC 38 03
+  t= 118.75 ms  CTRL -> MAQ  VEND_PENDING  02 0A 00 23 6E 03
+  -- y otra vez:
+  t= 218.75 ms  MAQ -> CTRL  VEND_REQUEST  02 0A 03 20 07 05 DC 38 03
+  t= 228.13 ms  CTRL -> MAQ  VEND_PENDING  02 0A 00 23 6E 03
+  t= 478.13 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t= 484.38 ms  CTRL -> MAQ  VEND_APPROVE  02 0A 02 21 30 01 27 03   txid=12289
+
+  [estado final de la sesion: ESPERANDO_CONFIRMA | cobros iniciados: 1]
+  (si 'cobros iniciados' fuera > 1, estariamos cobrando dos veces)
+
+============================================================================
+ ESCENARIO 5 - Pedido distinto con sesion abierta
+----------------------------------------------------------------------------
+ Ahora si es un pedido NUEVO (otra seleccion) mientras hay una venta
+ en curso: VEND_DENY motivo 0x04 'sesion en curso'.
+
+  t=   0.00 ms  MAQ -> CTRL  VEND_REQUEST  02 0A 03 20 07 05 DC 38 03
+  t=   9.38 ms  CTRL -> MAQ  VEND_PENDING  02 0A 00 23 6E 03
+  -- llega un pedido de OTRO producto:
+  t= 109.38 ms  MAQ -> CTRL  VEND_REQUEST  02 0A 03 20 09 03 20 90 03
+  t= 118.75 ms  CTRL -> MAQ  VEND_DENY     02 0A 01 22 04 6F 03   motivo=0x04 (sesion en curso)
+  t= 518.75 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t= 525.00 ms  CTRL -> MAQ  VEND_APPROVE  02 0A 02 21 40 01 85 03   txid=16385
+
+  [estado final de la sesion: ESPERANDO_CONFIRMA | cobros iniciados: 1]
+
+============================================================================
+ ESCENARIO 6 - El cobro nunca resuelve (ejercicio E2.8)
+----------------------------------------------------------------------------
+ Hacia el medio de pago somos MASTER: si el esclavo no contesta
+ nunca, el plazo lo tenemos que poner nosotros. Sin ese plazo la
+ sesion queda abierta para siempre y la maquina deja de vender.
+ Plazo elegido: 3000 ms (3x el peor caso normal de 900 ms).
+ Mientras tanto se contesta STATUS_RESP con estado OCUPADO.
+
+  t=   0.00 ms  MAQ -> CTRL  VEND_REQUEST  02 0A 03 20 21 09 C4 B2 03
+  t=   9.38 ms  CTRL -> MAQ  VEND_PENDING  02 0A 00 23 6E 03
+  t= 909.88 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t= 916.13 ms  CTRL -> MAQ  STATUS_RESP   02 0A 04 11 01 00 00 EB 2E 03   estado=OCUPADO temp=23.5C
+  t=1916.13 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t=1922.38 ms  CTRL -> MAQ  STATUS_RESP   02 0A 04 11 01 00 00 EB 2E 03   estado=OCUPADO temp=23.5C
+  t=3122.38 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t=3128.63 ms  CTRL -> MAQ  VEND_DENY     02 0A 01 22 05 68 03   motivo=0x05 (error interno)
+  t=3228.63 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t=3234.88 ms  CTRL -> MAQ  STATUS_RESP   02 0A 04 11 00 00 00 EB 38 03   estado=LISTO temp=23.5C
+
+  [estado final de la sesion: INACTIVA | cobros iniciados: 1]
+
+============================================================================
+ ESCENARIO 7 - El master no confirma la entrega (ejercicio E2.4)
+----------------------------------------------------------------------------
+ Informamos VEND_APPROVE y no llega ni VEND_SUCCESS ni VEND_FAILURE.
+ El APPROVE queda LATCHEADO: cada STATUS_REQ vuelve a recibir el
+ mismo txid, porque si nuestra respuesta se perdio el master nunca
+ se entero de que hay una venta aprobada... y la plata ya se cobro.
+ A los 2000 ms se cierra la sesion y queda anotada para el backend:
+ es el unico caso en que NO se puede saber si se entrego.
+
+  t=   0.00 ms  MAQ -> CTRL  VEND_REQUEST  02 0A 03 20 18 07 08 D5 03
+  t=   9.38 ms  CTRL -> MAQ  VEND_PENDING  02 0A 00 23 6E 03
+  t= 159.88 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t= 166.13 ms  CTRL -> MAQ  VEND_APPROVE  02 0A 02 21 88 21 20 03   txid=34849
+  t= 266.13 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t= 272.38 ms  CTRL -> MAQ  VEND_APPROVE  02 0A 02 21 88 21 20 03   txid=34849
+  t= 372.38 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t= 378.63 ms  CTRL -> MAQ  VEND_APPROVE  02 0A 02 21 88 21 20 03   txid=34849
+  t=2278.63 ms  MAQ -> CTRL  STATUS_REQ    02 0A 00 10 F7 03
+  t=2284.88 ms  CTRL -> MAQ  STATUS_RESP   02 0A 04 11 00 00 00 EB 38 03   estado=LISTO temp=23.5C
+
+  -- y ahora llega, tardisimo, un VEND_FAILURE con ese txid:
+  t=2284.88 ms  MAQ -> CTRL  VEND_FAILURE  02 0A 03 31 88 21 01 E2 03
+  t=2294.25 ms  CTRL -> MAQ  ACK           02 0A 00 01 80 03
+
+  [estado final de la sesion: INACTIVA | cobros iniciados: 1]
+  (txid desconocido: 1 -> se ACKea igual, decision NE-06)
+

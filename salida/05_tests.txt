@@ -1,0 +1,222 @@
+============================================================================
+ VCP-1 - Pruebas propias (requisito E1.8)
+============================================================================
+
+--- CRC-8 (poly 0x07, init 0x00) ---
+  ok    bloque vacio da 0x00 (valor inicial)
+  ok    un solo 0x00 da 0x00
+  ok    STATUS_REQ a 0x0A (Anexo B offset 3) -> 0xF7
+  ok    STATUS_REQ a 0x0B (Anexo B offset 9) -> 0x9C
+  ok    LOG_EVENT con STX/ETX en el payload -> 0x61
+  ok    VEND_APPROVE txid=42 (Anexo B offset 42) -> 0x0F
+  ok    VEND_SUCCESS txid=42 (Anexo B offset 58) -> 0xC6
+  ok    LOG_EVENT broadcast (Anexo B offset 66) -> 0x15
+  ok    VEND_REQUEST del offset 27: el CRC del vector NO coincide
+  ok      (el correcto habria sido 0x1C, en el vector dice 0xE3)
+  ok    LOG_EVENT del offset 36: el CRC del vector NO coincide
+  ok    incremental byte a byte == calculo de bloque
+  ok    un bit cambiado en el payload cambia el CRC
+
+--- Construccion de tramas (vcp_build) ---
+  ok    trama sin payload mide 6 bytes
+  ok    STATUS_REQ a 0x0A reproduce el offset 3 del Anexo B
+  ok    trama con 6 bytes de payload mide 12
+  ok    el payload con 0x02/0x03 va SIN escapar (offset 15)
+  ok    payload de 64 bytes entra justo en el buffer (70 bytes)
+  ok    len 65 se rechaza (maximo 64)
+  ok    buffer de salida chico se rechaza, no se desborda
+  ok    payload NULL con len>0 se rechaza
+  ok    buffer de salida NULL se rechaza
+  ok    ante error, vcp_build no escribe nada (todo o nada)
+  ok    el CRC emitido cubre ADDR+LEN+CMD+PAYLOAD
+  ok      (incluir el STX daria otro valor: el error seria silencioso)
+  ok    la trama termina en ETX
+  ok    la trama empieza en STX
+
+--- Utilidades de payload ---
+  ok    u16be: primero el byte alto
+  ok    u16be: despues el byte bajo
+  ok    u16be: ida y vuelta
+  ok    u16be: valor maximo
+  ok    STATUS_REQ lo manda el master
+  ok    VEND_REQUEST lo manda el master
+  ok    VEND_SUCCESS lo manda el master
+  ok    VEND_FAILURE lo manda el master
+  ok    LOG_EVENT lo manda el master
+  ok    ACK lo emitimos nosotros: no es una orden
+  ok    VEND_APPROVE lo emitimos nosotros: no es una orden
+  ok    STATUS_RESP lo emitimos nosotros: no es una orden
+  ok    un comando inventado no se acepta
+  ok    STATUS_REQ con LEN=0 es correcto
+  ok    STATUS_REQ con LEN=1 no lo es
+  ok    VEND_REQUEST necesita 3 bytes
+  ok    VEND_REQUEST con 2 bytes se rechaza (leeriamos basura)
+  ok    LOG_EVENT acepta 0 bytes
+  ok    LOG_EVENT acepta 64 bytes
+
+--- Receptor: caso normal ---
+  ok    una trama limpia produce un solo evento
+  ok    el evento es VCP_EV_FRAME
+  ok    ADDR = 0x0A
+  ok    CMD = STATUS_REQ
+  ok    LEN = 0
+  ok    t_etx_ms es el instante del ETX (100 + 5 bytes)
+  ok    trama normal: se detecta en el mismo instante del ETX
+  ok    al terminar no queda trama a medias
+  ok    el ruido previo no impide detectar la trama
+  ok    los 3 bytes espurios se reportan
+  ok    el STX estaba en el offset 3
+  ok    un 0x02/0x03 en el payload NO rompe el parseo
+  ok    LEN = 6
+  ok    el payload llega intacto
+  ok    se arma una trama de 70 bytes
+  ok    el payload maximo (64) se recibe entero
+  ok    los 64 bytes llegan intactos
+  ok    dos tramas pegadas se detectan las dos
+  ok    la segunda es para 0x0B
+  ok    sin bytes descartados entre ellas
+
+--- Receptor: errores diferenciados (E1.5) ---
+  ok    CRC malo -> VCP_EV_ERR_CRC
+  ok    y NO se entrega la trama
+  ok    el contador de CRC sube
+  ok    LEN=65 -> VCP_EV_ERR_LEN
+  ok    se corta en el byte del LEN, sin esperar CRC ni ETX
+  ok    sin ETX -> VCP_EV_ERR_FRAMING
+  ok    CRC malo + ETX ausente se informa como FRAMING
+  ok      (y no como CRC: sin ETX el CRC no significa nada)
+
+--- Receptor: timeout entre bytes (E1.6) ---
+  ok    quedo una trama a medio recibir
+  ok    a los 2 ms de silencio todavia no vence
+  ok    a los 6 ms de silencio vence el timeout
+  ok    y el candidato se abandona
+  ok    despues del timeout se sigue recibiendo normal (E1.4)
+  ok    4 ms entre bytes esta dentro del limite de 5 ms
+  ok    y la trama se entrega
+  ok    wraparound del contador: no vence antes de tiempo
+  ok    wraparound del contador: vence cuando corresponde
+
+--- Receptor: imposible desbordar (E1.3) ---
+  ok    5000 STX seguidos: cero errores internos (E1.3)
+  ok    5000 STX seguidos: ninguna trama fantasma
+  ok    una pausa en la linea limpia el estado (timeout)
+  ok    y despues de la pausa se acepta una trama valida (E1.4)
+  ok    patron adversarial: cero errores internos
+  ok    tras una pausa vuelve a detectar tramas validas
+  ok    ningun valor de LEN (0..255) produce error interno
+
+--- Receptor: politica de re-sincronizacion (E1.4) ---
+  ok    REPROCESO: el candidato externo falla por CRC
+  ok    REPROCESO: y encuentra la trama escondida
+  ok    REPROCESO: la trama escondida es VEND_APPROVE
+  ok    REPROCESO: viene marcada como recuperada
+  ok    REPROCESO: el contador de recuperadas sube
+  ok    DESCARTE: la trama escondida se pierde
+  ok    REPROCESO: recupera las DOS tramas tapadas
+  ok    DESCARTE: pierde las dos
+  ok    se recupera la trama
+  ok    su ETX habia llegado en t=8 ms
+  ok    pero se detecta MAS TARDE (por eso existe el plazo)
+  ok    despues de dos tramas rotas se sigue aceptando una buena
+
+--- Aplicacion: filtrado por direccion (E1.13) ---
+  ok    trama propia: se responde
+  ok      con STATUS_RESP
+  ok    trama ajena: NO se responde
+  ok      y no se toca la UART
+  ok    broadcast: NO se responde
+  ok    en total solo hubo UNA escritura a la UART
+  ok    un VEND_REQUEST para otra direccion no arranca cobro
+  ok      ni toca la sesion (decision NE-07)
+
+--- Aplicacion: comandos de sentido inverso (NE-05) ---
+  ok    VEND_APPROVE recibido: no es una orden, no se responde
+  ok    ACK recibido: tampoco
+  ok    comando inventado: tampoco
+  ok    ninguna respuesta transmitida
+
+--- Aplicacion: LEN incoherente con el comando (NE-09) ---
+  ok    VEND_REQUEST con LEN=2 (necesita 3): no se responde
+  ok      y sobre todo: no arranca ningun cobro
+  ok    STATUS_REQ con payload: no se responde
+
+--- Aplicacion: STATUS_RESP ---
+  ok    STATUS_RESP lleva 4 bytes de payload
+  ok    estado = LISTO
+  ok    reservado = 0x00
+  ok    temperatura 23.5 C = 235 decimas, big-endian
+  ok    la trama emitida empieza como corresponde
+  ok    y termina en ETX
+  ok    temperatura negativa viaja bien (complemento a dos)
+
+--- Sesion de venta: caso completo (E1.12) ---
+  ok    pedido valido -> VEND_PENDING
+  ok      y arranca el cobro
+  ok      estado COBRANDO
+  ok    cobro en curso -> sigue contestando STATUS_RESP
+  ok      estado OCUPADO
+  ok    E1.11: el cobro resolvio y NO se transmitio nada
+  ok      el resultado queda esperando a que pregunten
+  ok    hay resultado pendiente -> VEND_APPROVE (excepcion A.4)
+  ok      con el txid del medio de pago
+  ok      y pasa a esperar la confirmacion
+  ok    sin confirmar: se repite el APPROVE (NE-03)
+  ok      con el MISMO txid (para que el master lo deduplique)
+  ok    VEND_SUCCESS -> ACK
+  ok      sesion cerrada
+  ok      venta confirmada
+  ok    vuelve a STATUS_RESP
+  ok      estado LISTO
+
+--- Sesion de venta: rechazos ---
+  ok    primero VEND_PENDING
+  ok    cobro rechazado -> DENY
+  ok      motivo 0x03
+  ok    el DENY no se repite: vuelve STATUS_RESP
+  ok    seleccion 0 -> 0x02
+  ok    seleccion 81 -> 0x02
+  ok    precio 49 -> 0x01
+  ok    precio 20001 -> 0x01
+  ok    sel=1 precio=50 se acepta
+  ok    sel=80 precio=20000 se acepta
+  ok    sel y precio invalidos: se informa la seleccion (NE-04)
+
+--- Sesion de venta: reintentos del master (NE-01, NE-02) ---
+  ok    primer pedido: PENDING
+  ok    el mismo pedido repetido: PENDING otra vez, no DENY
+  ok      y NO se inicia un segundo cobro (no se cobra dos veces)
+  ok    otro producto con sesion abierta -> DENY 0x04
+  ok      sin iniciar otro cobro
+  ok    con sesion abierta, 0x04 gana sobre el error de rango
+
+--- Sesion de venta: plazos propios (E2.4, E2.8) ---
+  ok    a los 2 s todavia se espera el cobro
+  ok    a los 3.5 s vence el plazo del medio de pago
+  ok    se informa DENY 0x05 error interno, no 0x03 pago rechazado
+  ok    queda contabilizado
+  ok    se informa el APPROVE
+  ok    a 1.4 s del informe todavia se espera confirmacion
+  ok    a los 2 s se cierra la sesion sin confirmar
+  ok    queda anotada para el backend (caso E2.4)
+  ok    VEND_SUCCESS con txid desconocido: se ACKea igual (NE-06)
+  ok      pero queda registrado
+  ok      y no toca la sesion
+
+--- Aplicacion: guardia de plazo (E1.14) ---
+  ok    retardo de 4 ms: se responde
+  ok    retardo de 5 ms: se responde
+  ok    retardo de 6 ms: NO se responde
+  ok      la trama NO sale a la linea
+  ok      pero se muestra que habria contestado (para el log)
+  ok      y queda contabilizada
+  ok    VEND_REQUEST detectado tarde: no se contesta
+  ok      PERO el cobro SI arranca: la trama llego y es valida
+  ok      ignorarla nos dejaria desincronizados con la maquina
+
+--- E1.11: el controlador nunca transmite solo ---
+  ok    5 s de lazo principal sin tramas: cero transmisiones
+
+============================================================================
+ RESULTADO: 179 verificaciones ok, 0 fallas
+============================================================================
